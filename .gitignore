@@ -1,0 +1,8 @@
+.idea/
+target
+out
+**/*.iml
+**/target
+**/out
+nacos/nacos
+nacos/nacos-server-1.2.0.zip
