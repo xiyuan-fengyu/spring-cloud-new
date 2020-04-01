@@ -1,9 +1,13 @@
 package com.xiyuan.cloud.controller;
 
 import com.xiyuan.cloud.config.TestConfig;
+import com.xiyuan.cloud.param.Message;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 /**
@@ -16,9 +20,10 @@ public class TestController {
     private TestConfig testConfig;
 
     @ResponseBody
-    @RequestMapping("/test")
-    public String test() {
-        return testConfig.toString();
+    @RequestMapping(value = "/test", method = RequestMethod.GET)
+    @ApiOperation(value = "测试swagger", httpMethod = "GET")
+    public String test(@ApiParam("测试实体类参数") Message message) {
+        return message + "\n" + testConfig.toString();
     }
 
 }
