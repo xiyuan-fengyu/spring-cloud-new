@@ -9,7 +9,7 @@
 
 # nacos server 安装     
 从 https://github.com/alibaba/nacos/releases 下载 nacos-server-\*.\*.\*.zip  
-解压后，运行 nacos/bin/startup.cmd  
+解压后，在 nacos 目录执行 bin/startup.cmd 启动    
 然后浏览器访问 http://localhost:8848/nacos/index.html  
 
 # 作为配置中心使用  
@@ -237,3 +237,81 @@ public class App {
 }
 ```
 test1 启动后，服务列表会增加一个 test1 服务，访问 http://localhost:8081/test 会得到与 http://localhost:8080/test 一样的结果  
+
+# 集群搭建
+参考 http://www.imooc.com/article/288153  
+将 nacos-server-1.2.0.zip 解压出两份 nacos-1 和 nacos-2  
+
+首先在mysql中添加数据库(注意：这个版本的nacos需要使用5.7相近的mysql版本，否则可能因为mysql驱动的问题，连接不上)  
+将 nacos-1/conf/nacos-mysql.sql 复制到服务器上，保存在/root/nacos-mysql.sql    
+执行以下语句创建数据库  
+```shell script
+echo -e '
+drop database if exists nacos;
+create database nacos;
+drop user if exists nacos;
+create user nacos@'"'%'"' identified by '"'Qwer_1234'"';
+grant all privileges on nacos.* to nacos@'"'%'"' with grant option;
+flush privileges;
+use nacos;
+' > /root/nacos-prepare.sql;
+cat /root/nacos-mysql.sql >> /root/nacos-prepare.sql;
+mysql -h localhost --port 3306 -uroot -p < /root/nacos-prepare.sql
+```  
+
+修改 nacos-1/conf/application.properties，启用mysql    
+```properties
+### If user MySQL as datasource:
+spring.datasource.platform=mysql
+
+### Count of DB:
+db.num=1
+
+### Connect URL of DB:
+db.url.0=jdbc:mysql://192.168.99.149:3306/nacos?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true
+db.user=nacos
+db.password=Qwer_1234
+```
+
+修改 nacos-2/conf/application.properties，修改端口，启用mysql    
+```properties
+### Default web server port:
+server.port=8849
+
+### If user MySQL as datasource:
+spring.datasource.platform=mysql
+
+### Count of DB:
+db.num=1
+
+### Connect URL of DB:
+db.url.0=jdbc:mysql://192.168.99.149:3306/nacos?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true
+db.user=nacos
+db.password=Qwer_1234
+```
+
+修改 nacos-*/conf/cluster.conf，注意ip为局域网ip或外网ip，不能是localhost，127.0.0.1，否则无法成功加入集群      
+```
+192.168.51.99:8848
+192.168.51.99:8849
+```  
+
+修改 nacos-*/bin/startup.cmd 中的 MODE  
+```
+set MODE="cluster"
+``` 
+
+然后可以修改 test, test1 两个项目的 bootstrap.xml 的 nacos 配置  
+```yaml
+spring:
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848,127.0.0.1:8849
+        group: test
+      discovery:
+        server-addr: 127.0.0.1:8848,127.0.0.1:8849
+        group: test
+```   
+
+
