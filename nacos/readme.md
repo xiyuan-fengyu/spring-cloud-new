@@ -242,7 +242,7 @@ test1 启动后，服务列表会增加一个 test1 服务，访问 http://local
 参考 http://www.imooc.com/article/288153  
 将 nacos-server-1.2.0.zip 解压出两份 nacos-1 和 nacos-2  
 
-首先在mysql中添加数据库(注意：这个版本的nacos需要使用5.7相近的mysql版本，否则可能因为mysql驱动的问题，连接不上)  
+首先在mysql中添加数据库(注意：这个版本的nacos需要使用5.7相近的mysql版本，否则可能因为mysql驱动的问题，连接不上；如果本本不对应，可参考 http://www.imooc.com/article/288153 里面的方法解决)    
 将 nacos-1/conf/nacos-mysql.sql 复制到服务器上，保存在/root/nacos-mysql.sql    
 执行以下语句创建数据库  
 ```shell script

@@ -2,17 +2,17 @@ package com.xiyuan.cloud;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.cloud.netflix.hystrix.dashboard.EnableHystrixDashboard;
 
 /**
  * Created by xiyuan_fengyu on 2020/3/26 14:58.
  */
 @SpringBootApplication
-@EnableFeignClients
-public class App {
+@EnableHystrixDashboard
+public class HystrixDashboardApp {
 
     public static void main(String[] args) {
-        SpringApplication.run(App.class, args);
+        SpringApplication.run(HystrixDashboardApp.class, args);
     }
 
 }
