@@ -96,3 +96,7 @@ http://localhost:8081/test
 停止 test，在访问一次  
 便可在hystrix-dashbord界面看到  
 ![](../md-imgs/hystrix-dashbord-2.jpg)  
+
+
+# turbine
+因为项目里面用的nacos作为注册中心，在集成turbine过程中，发现它貌似只支持eureka，所以这里就不演示这个了    
