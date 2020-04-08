@@ -6,3 +6,4 @@ out
 **/out
 nacos/nacos-*
 nacos/nacos-server-1.2.0.zip
+sentinel/sentinel-dashboard-1.7.2.jar

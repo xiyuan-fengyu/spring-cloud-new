@@ -26,4 +26,13 @@ public class TestController {
         return message + "\n" + testConfig.toString();
     }
 
+    @ResponseBody
+    @RequestMapping(value = "/testSleep", method = RequestMethod.GET)
+    public String testSleep(Long ms) throws InterruptedException {
+        if (ms != null && ms > 0) {
+            Thread.sleep(ms);
+        }
+        return "sleep: " + ms;
+    }
+
 }
