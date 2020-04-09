@@ -244,6 +244,7 @@ public interface TestFeignClient {
 ```
 
 启动 test 和 test2   
+访问 http://localhost:8082/test?ms=800  
 test挂掉后，会出现熔断效果  
 @TODO 如何验证在test没有挂掉，但有卡顿的情况下，熔断降级生效了    
 
