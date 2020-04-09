@@ -33,9 +33,9 @@ spring.cloud.sentinel.datasource.flow.nacos.ruleType=flow
 ```json
 [
   {
-    "resource": "the-protected-resource-id",
+    "resource": "test",
     "controlBehavior": 2,
-    "count": 1,
+    "count": 20,
     "grade": 1,
     "limitApp": "default",
     "strategy": 0
@@ -49,6 +49,8 @@ package com.xiyuan.cloud.controller;
 
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.alibaba.csp.sentinel.slots.block.degrade.DegradeException;
+import com.alibaba.csp.sentinel.slots.block.flow.FlowException;
 import com.xiyuan.cloud.feign.TestFeignClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -66,34 +68,28 @@ public class TestController {
 
     @ResponseBody
     @RequestMapping("/test")
-    @SentinelResource(value = "the-protected-resource-id", blockHandler = "testBlocked")
+    @SentinelResource(value = "test", blockHandler = "testBlocked")
     public String test(Long ms) {
         return testFeignClient.testSleep(ms);
     }
 
     // testBlocked 相比于原方法 test，参数列表多了一个 BlockException e 参数
     public String testBlocked(Long ms, BlockException e) {
-        return "请求太过频繁，请稍后再试";
+        if (e instanceof FlowException) {
+            return "请求太过频繁，请稍后再试";
+        }
+        else if (e instanceof DegradeException) {
+            return "服务不可用，请稍后再试";
+        }
+        return "请稍后再试";
     }
 
 }
 ```
 
-在浏览器中访问    
-http://localhost:8082/test  
-能够拿到正确的结果  
-```
-Message{id=0, content=null} TestConfig{id=1, name='Tom'}  
-```
-接下来快速刷新两次，会得到结果  
-```
-请求太过频繁，请稍后再试  
-```
+@SentinelResource 的 value 一定要填写，且不要和 RequestMapping的value一样，否则 testBlocked 会几率性失效，原因未知  
 
 ## 熔断
-参考  
-https://blog.csdn.net/autfish/article/details/90411698  
-  
 修改 test2 的 nacos 配置，添加一下配置     
 ```
 feign.sentinel.enabled=true
@@ -105,11 +101,12 @@ spring.cloud.sentinel.datasource.degrade.nacos.groupId=${spring.cloud.nacos.conf
 spring.cloud.sentinel.datasource.degrade.nacos.dataId=${spring.application.name}-sentinel-degrade
 spring.cloud.sentinel.datasource.degrade.nacos.ruleType=degrade
 ``` 
-为test2项目添加一个熔断的 nacos 配置 data-id: test2-sentinel-degrade, group: test    
-```
+
+为test2项目添加一个熔断的 nacos 配置 data-id: test2-sentinel-degrade, group: test     
+```json
 [
   {
-    "resource": "GET:http://test/test",
+    "resource": "test",
     "count": 500,
     "grade": 0,
     "timeWindow": 10
@@ -198,13 +195,14 @@ test/src/main/java/com/xiyuan/cloud/controller/TestController.java
         return "sleep: " + ms;
     }
 ```
-在 test2 增加一个feign client 来测试  
+在 test2 增加一个feign client  
 ```
 package com.xiyuan.cloud.feign;
 
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
@@ -213,7 +211,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 @FeignClient(name = "test", fallback = TestFeignClient.Fallback.class)
 public interface TestFeignClient {
 
-    @RequestMapping("/testSleep")
+    @RequestMapping(value = "/testSleep", method = RequestMethod.GET)
     String testSleep(@RequestParam("ms") Long ms);
 
     @Configuration
@@ -229,24 +227,17 @@ public interface TestFeignClient {
 }
 ```
 
-修改 nacos 配置 test2-sentinel-flow，以防被限流    
- ```
-[
-  {
-    "resource": "the-protected-resource-id",
-    "controlBehavior": 2,
-    "count": 20,
-    "grade": 1,
-    "limitApp": "default",
-    "strategy": 0
-  }
-]
-```
-
 启动 test 和 test2   
-访问 http://localhost:8082/test?ms=800  
-test挂掉后，会出现熔断效果  
-@TODO 如何验证在test没有挂掉，但有卡顿的情况下，熔断降级生效了    
+运行 test2/src/main/java/com/xiyuan/cloud/FlowDegradeTest.java 来测试限流和熔断效果  
+运气好的话，就能看到类似下面的提示：  
+```
+req-36: 服务不可用，请稍后再试
+req-16: sleep: 1000
+req-48: 请求太过频繁，请稍后再试
+req-37: 服务不可用，请稍后再试
+req-17: sleep: 1000
+```
+有正常完成的请求，有被限流的，也有被熔断的  
 
 ## sentinel-dashboard
 https://github.com/alibaba/Sentinel/tree/master/sentinel-dashboard  
@@ -285,4 +276,13 @@ public class CommandCenterLog extends com.alibaba.csp.sentinel.log.LogBase {
 重启 test2 后  
 浏览器访问(用户名密码在启动命令中可配置)  
 http://localhost:9091        
-便可以在 sentinel-dashboard 中看到 test2 的限流熔断信息    
+便可以在 sentinel-dashboard 中看到 test2 的限流熔断信息      
+可以看到三个资源   
+```
+GET:http://test/testSleep
+test
+/test
+```
+test 资源是通过 @SentinelResource 定义的，可以触发 testBlocked 回调    
+/test是sentinel 通过 com.xiyuan.cloud.controller.TestController 中的@RequestMapping自动生成的，不能触发回调    
+GET:http://test/testSleep 是通过 com.xiyuan.cloud.feign.TestFeignClient 中的@RequestMapping自动生成的，不能触发回调  
