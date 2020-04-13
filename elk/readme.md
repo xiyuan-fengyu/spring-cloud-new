@@ -210,8 +210,8 @@ logstash -e 'input { stdin { } } output { elasticsearch { hosts => ["127.0.0.1:9
        "message" => "add log to elasticsearch"
 }
 ```
-然后在 elasticsearch-head 中可以看到记录  
-![](../md-imgs/elk-0.jpg)
+然后在 elasticsearch-head 中可以看到记录(一次运行没有看到数据就再运行一次上面的测试命令)    
+![](../md-imgs/elk-0.jpg)  
 
 ### kibana
 https://www.elastic.co/guide/en/kibana/7.6/rpm.html#rpm-repo  
