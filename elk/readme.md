@@ -224,7 +224,7 @@ fi
 mkdir /data
 touch /data/test.txt
 
-echo -e '
+cat > /etc/logstash/conf.d/elk.conf << 'EOF'
 input {
     file {
         path => "/data/test.txt"
@@ -244,7 +244,8 @@ output {
         }
     }
 }
-' > /etc/logstash/conf.d/elk.conf
+EOF
+
 /usr/share/logstash/bin/system-install
 systemctl enable logstash
 systemctl start logstash
@@ -277,8 +278,7 @@ type=rpm-md
 yum -y install kibana
 
 # 修改配置
-# 以下配置较长，在idea的Terminal ssh工具中直接执行会有异常，可以先写入到本地文件再上传到服务器
-(cat << EOF
+cat > /etc/kibana/kibana.yml << 'EOF'
 # Kibana is served by a back end server. This setting specifies the port to use.
 server.port: 5601
 
@@ -391,9 +391,8 @@ kibana.index: ".kibana"
 
 # Specifies locale to be used for all localizable strings, dates and number formats.
 # Supported languages are the following: English - en , by default , Chinese - zh-CN .
-i18n.locale: "zh-CN"
+#i18n.locale: "zh-CN"
 EOF
-) > /etc/kibana/kibana.yml
 
 # 设置开机启动
 systemctl enable kibana
@@ -411,5 +410,178 @@ http://IP:5601/app/kibana
 ![](../md-imgs/elk-5.jpg)  
 ![](../md-imgs/elk-6.jpg)  
 
-## elk 搜集分析 nginx 日志实例  
-TODO  
+## elk 分析 nginx 流量  
+安装 nginx  
+```shell script
+rpm -Uvh http://nginx.org/packages/centos/7/noarch/RPMS/nginx-release-centos-7-0.el7.ngx.noarch.rpm
+# 安装
+yum -y install nginx
+
+# 创建文件夹用于存放配置，静态文件，证书，日志文件夹
+mkdir -p /data/app/nginx/static
+mkdir -p /data/app/nginx/config
+mkdir -p /data/app/nginx/ssl
+mkdir -p /data/app/nginx/logs
+
+cat > /etc/nginx/nginx.conf << 'EOF'
+# For more information on configuration, see:
+#   * Official English Documentation: http://nginx.org/en/docs/
+#   * Official Russian Documentation: http://nginx.org/ru/docs/
+
+user root;
+worker_processes auto;
+error_log /data/app/nginx/logs/error.log;
+pid /data/app/nginx/nginx.pid;
+
+# Load dynamic modules. See /usr/share/doc/nginx/README.dynamic.
+include /usr/share/nginx/modules/*.conf;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+    '$status $body_bytes_sent "$http_referer" '
+    '"$http_user_agent" "$http_x_forwarded_for"';
+
+    log_format lf_access_json '{"@timestamp":"$time_iso8601",'
+        '"@version":"1",'
+        '"client":"$remote_addr",'
+        '"url":"$uri",'
+        '"status":"$status",'
+        '"domain":"$host",'
+        '"host":"$server_addr",'
+        '"size":$body_bytes_sent,'
+        '"responsetime":$request_time,'
+        '"referer": "$http_referer",'
+        '"ua": "$http_user_agent"'
+    '}';
+
+    sendfile            on;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    keepalive_timeout   65;
+    types_hash_max_size 2048;
+
+    include             /etc/nginx/mime.types;
+    default_type        application/octet-stream;
+
+    # Load modular configuration files from the /etc/nginx/conf.d directory.
+    # See http://nginx.org/en/docs/ngx_core_module.html#include
+    # for more information.
+    include /data/app/nginx/config/*.conf;
+    include /etc/nginx/conf.d/*.conf;
+
+    server {
+        listen       80 default_server;
+        listen       [::]:80 default_server;
+        server_name  _;
+        root         /usr/share/nginx/html;
+
+        # Load configuration files for the default server block.
+        include /etc/nginx/default.d/*.conf;
+
+        access_log  /data/app/nginx/logs/default.access_json.log  lf_access_json;
+
+        location / {
+        }
+
+        error_page 404 /404.html;
+        location = /40x.html {
+        }
+
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+        }
+    }
+
+    # Settings for a TLS enabled server.
+    #
+    #    server {
+    #        listen       443 ssl http2 default_server;
+    #        listen       [::]:443 ssl http2 default_server;
+    #        server_name  _;
+    #        root         /usr/share/nginx/html;
+    #
+    #        ssl_certificate "/etc/pki/nginx/server.crt";
+    #        ssl_certificate_key "/etc/pki/nginx/private/server.key";
+    #        ssl_session_cache shared:SSL:1m;
+    #        ssl_session_timeout  10m;
+    #        ssl_ciphers HIGH:!aNULL:!MD5;
+    #        ssl_prefer_server_ciphers on;
+    #
+    #        # Load configuration files for the default server block.
+    #        include /etc/nginx/default.d/*.conf;
+    #
+    #        location / {
+    #        }
+    #
+    #        error_page 404 /404.html;
+    #            location = /40x.html {
+    #        }
+    #
+    #        error_page 500 502 503 504 /50x.html;
+    #            location = /50x.html {
+    #        }
+    #    }
+
+}
+EOF
+```
+启动 nginx  
+```shell script
+nginx
+```
+浏览器访问   
+http://IP/  
+看看是否有日志输出  
+```shell script
+tail -f /data/app/nginx/logs/default.access_json.log
+```
+修改 logstash 配置  
+```shell script
+cat > /etc/logstash/conf.d/elk.conf << 'EOF'
+input {
+    file {
+        path => "/data/app/nginx/logs/default.access_json.log"
+        type => "nginx-access"
+        start_position => "beginning"
+        codec => json {
+            charset=>"UTF-8"
+        }
+    }
+}
+
+filter {
+    json {
+        source => "message"
+        remove_field => ["message"]
+    }
+}
+
+output {
+    if [type] == "nginx-access" {
+        elasticsearch {
+            hosts => ["localhost:9200"]
+            index => "nginx-access-%{+YYYY.MM.dd}"
+        }
+    }
+}
+EOF
+```
+重启 logstash  
+```shell script
+systemctl restart logstash
+# tail -f /var/log/logstash/logstash-plain.log
+```
+ctrl+F5 强制刷新浏览器，让 nginx 再生产几条日志  
+然后在 kibana 内分析日志数据  
+![](../md-imgs/elk-7.jpg)  
+![](../md-imgs/elk-8.jpg)  
+![](../md-imgs/elk-9.jpg)  
+![](../md-imgs/elk-10.jpg)  
+![](../md-imgs/elk-11.jpg)  
+![](../md-imgs/elk-12.jpg)  
+![](../md-imgs/elk-13.jpg)  
+![](../md-imgs/elk-14.jpg)  
